@@ -1,0 +1,46 @@
+"0","simulate <- function(params) {"
+"0","  write.table(params, file=""./x.csv"", sep="","", row.names=F, col.names=F)"
+"0","  system(""matlab -nodisplay -r \""run('./simulate.m'); exit\"""")"
+"0","  results <- read.csv(""y.csv"", header=F)"
+"0","  return(list(stress=results[1], displ=results[2]))"
+"0","}"
+"0",""
+"0","results <- simulate(init_design[1,])"
+"1","
+                            < M A T L A B (R) >
+                  Copyright 1984-2022 The MathWorks, Inc.
+                  R2022a (9.12.0.1884302) 64-bit (maci64)
+                             February 16, 2022
+
+"
+"1"," 
+"
+"1","To get started, type doc.
+"
+"1","For product information, visit www.mathworks.com.
+"
+"1"," 
+"
+"1","
+x =
+
+   1.0e+11 *
+
+    2.5769    0.0000    0.0000    0.0000    0.0000    0.0000
+
+"
+"2","2022-04-09 23:12:49.413 MATLAB[4552:50641] CoreText note: Client requested name "".SFNS-Regular"", it will get Times-Roman rather than the intended font. All system UI font access should be through proper APIs such as CTFontCreateUIFontForLanguage() or +[NSFont systemFontOfSize:].
+2022-04-09 23:12:49.413 MATLAB[4552:50641] CoreText note: Set a breakpoint on CTFontLogSystemFontNameRequest to debug.
+"
+"2","2022-04-09 23:12:49.416 MATLAB[4552:50641] CoreText note: Client requested name "".SFNS-Bold"", it will get Times-Roman rather than the intended font. All system UI font access should be through proper APIs such as CTFontCreateUIFontForLanguage() or +[NSFont systemFontOfSize:].
+"
+"2","2022-04-09 23:12:49.424 MATLAB[4552:50641] CoreText note: Client requested name "".SFNS-Regular"", it will get Times-Roman rather than the intended font. All system UI font access should be through proper APIs such as CTFontCreateUIFontForLanguage() or +[NSFont systemFontOfSize:].
+"
+"2","2022-04-09 23:12:49.424 MATLAB[4552:50641] CoreText note: Client requested name "".SFNS-Bold"", it will get Times-Roman rather than the intended font. All system UI font access should be through proper APIs such as CTFontCreateUIFontForLanguage() or +[NSFont systemFontOfSize:].
+"
+"1","   1.3803e+09
+
+"
+"1","    0.0022
+
+"
