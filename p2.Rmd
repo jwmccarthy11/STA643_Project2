@@ -1,6 +1,6 @@
 ---
 title: "Project 2"
-author: "Jack McCarthy"
+author: "Jack McCarthy, Michael Sarkis"
 date: "4/9/2022"
 output: pdf_document
 ---
