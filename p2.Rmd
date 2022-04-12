@@ -1,6 +1,6 @@
 ---
 title: "Project 2"
-author: "Jack McCarthy"
+author: "Jack McCarthy, Michael Sarkis, Jaskaran Singh"
 date: "4/9/2022"
 output: pdf_document
 ---
@@ -151,7 +151,7 @@ simulate <- function(params) {
 stress <- c()
 displ  <- c()
 
-for (i in 1:nrow(X)) {
+for (i in 1:nrow(initial_design)) {
   print(paste0("[Row ",i,"] Simulating..."))
   results <- simulate(initial_design[i,])
   stress  <- c(stress, results[1])
