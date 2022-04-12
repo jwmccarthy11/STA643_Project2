@@ -17,6 +17,7 @@ library(tidyverse)
 library(plgp)
 library(gridExtra)
 library(ggpubr)
+library(laGP)
 ```
 
 # Initial Design
@@ -36,7 +37,7 @@ ranges <- tibble(
 ```
 
 ```{r}
-lhs <- function(m, n, r) {
+lhs <- function(m, n) {
   # generate the Latin hypercube
   l <- (-(n - 1)/2):((n - 1)/2)
   L <- matrix(NA, nrow=n, ncol=m)
@@ -47,8 +48,8 @@ lhs <- function(m, n, r) {
   X <- (L + (n - 1)/2 + U)/n
   
   # map to valid input ranges
-  X <- X*rep(r[2,]-r[1,], each=n) + rep(r[1,], each=n)
-  colnames(X) <- colnames(r)
+  # X <- X*rep(r[2,]-r[1,], each=n) + rep(r[1,], each=n)
+  # colnames(X) <- colnames(r)
 
   # return the design
   # return(list(X=X, g=c((l + (n - 1)/2)/n,1)))
@@ -63,9 +64,9 @@ criterion <- function(X) {
   min(d)
 }
 
-maximin <- function(m, n, r, T=100000)
+maximin <- function(m, n, T=100000)
 {
-  X <- lhs(m, n, r)     ## initial design
+  X <- lhs(m, n)     ## initial design
   md <- criterion(X)
 
   for(t in 1:T) {
@@ -90,9 +91,21 @@ maximin <- function(m, n, r, T=100000)
 }
 ```
 
+```{r}
+map_ranges <- function(X, ranges) {
+  X*rep(ranges[2,]-ranges[1,], each=length(X)/6) + rep(ranges[1,], each=length(X)/6)
+}
+```
+
 ```{r fig.height=8, fig.width=8}
-init_design <- maximin(6, 25, ranges) %>%
-  as.data.frame()
+# dimensions
+m <- 6
+n <- 25
+
+# get initial design
+X <- maximin(m, n)
+colnames(X) <- colnames(ranges)
+init_design <- as.data.frame(map_ranges(X, ranges))
 
 # sample projections
 p1 <- init_design %>%
@@ -130,26 +143,26 @@ simulate <- function(params) {
   system("matlab -nodisplay -r \"run('./simulate.m'); exit\"", 
          ignore.stdout=T, ignore.stderr=T)
   results <- read.csv("y.csv", header=F)
-  return(list(stress=results[1], displ=results[2]))
+  return(c(unlist(results[1]), unlist(results[2])))
 }
 ```
 
 ```{r}
-# stress <- c()
-# displ  <- c()
-# 
-# for (i in 1:nrow(init_design)) {
-#   print(paste0("[Row ",i,"] Simulating..."))
-#   results <- simulate(init_design[i,])
-#   stress  <- c(stress, results$stress)
-#   displ   <- c(displ, results$displ)
-#   print(paste0("[Row ",i,"] ", results$stress, ", ", results$displ))
-# }
-# 
-# initial_df <- init_design %>%
-#   mutate(stress=unlist(stress),
-#          displ=unlist(displ)) %>%
-#   write.csv(., file="./initial.csv")
+stress <- c()
+displ  <- c()
+
+for (i in 1:nrow(initial_design)) {
+  print(paste0("[Row ",i,"] Simulating..."))
+  results <- simulate(initial_design[i,])
+  stress  <- c(stress, results[1])
+  displ   <- c(displ, results[2])
+  print(paste0("[Row ",i,"] Done"))
+}
+
+initial_df <- init_design %>%
+  mutate(stress=stress,
+         displ=displ) %>%
+  write.csv(., file="./initial.csv")
 ```
 
 ```{r fig.height=8, fig.width=8}
@@ -198,4 +211,118 @@ p4 <- initial_df %>%
     guides(size=F)
 
 ggarrange(p1, p2, p3, p4, nrow=2, ncol=2, common.legend=T, legend="bottom")
+```
+
+```{r}
+# get obs, resp
+y <- initial_df %>%
+  select(stress) %>%
+  pull() / 1e8
+disp <- initial_df %>%
+  select(displ) %>%
+  pull()
+
+# fit GP
+g <- garg(list(mle=TRUE, max=1), y)
+d <- darg(list(mle=TRUE, max=1), X)
+gpi <- newGP(X, y, d=d$start, g=g$start, dK=T)
+mle <- jmleGP(gpi, c(d$min, d$max), c(g$min, g$max), g$ab, g$ab)
+```
+
+```{r}
+maximin_seq <- function(m, n, T=100000, Xorig=NULL) 
+ {   
+  X <- matrix(runif(n*m), ncol=m)     ## initial design
+  d <- distance(X)
+  d <- d[upper.tri(d)]
+  md <- min(d)
+  if(!is.null(Xorig)) {               ## new code
+    md2 <- min(distance(X, Xorig))
+    if(md2 < md) {
+      md <- md2
+    }
+  }
+
+  for(t in 1:T) {
+    row <- sample(1:n, 1)
+    xold <- X[row,]                   ## random row selection
+    X[row,] <- runif(m)               ## random new row
+    d <- distance(X)
+    d <- d[upper.tri(d)]
+    mdprime <- min(d)
+    if(!is.null(Xorig)) {             ## new code
+      mdprime2 <- min(distance(X, Xorig))
+      if(mdprime2 < mdprime) mdprime <- mdprime2
+    }
+    if(mdprime > md) { 
+      md <- mdprime
+    } else { 
+      X[row,] <- xold 
+    }
+  }
+  
+  return(X)
+}
+
+obj.alm <- function(XX, gpi) {
+  -sqrt(predGP(gpi, matrix(XX, nrow=1), lite=TRUE)$s2)
+}
+```
+
+```{r}
+opt_search <- function(X, gpi, obj=obj.alm) {
+  start <- maximin_seq(ncol(X), nrow(X), Xorig=X)
+  xnew <- matrix(NA, nrow=nrow(start), ncol=ncol(start)+1)
+  for(i in 1:nrow(start)) {
+    out <- optim(start[i,], obj, method="L-BFGS-B", lower=0, upper=1, gpi=gpi)
+    xnew[i,] <- c(out$par, -out$value)
+  }
+  xnew <- data.frame(xnew)
+  colnames(xnew) <- c(colnames(X), "var")
+  return(xnew)
+}
+```
+
+```{r}
+for (i in 1:100) {
+  print(paste0("[",i,"]"," Finding new point"))
+
+  # get new point
+  soln <- opt_search(X, gpi)
+  xnew <- soln %>%
+    as.data.frame() %>%
+    slice_max(order_by=var, n=1, with_ties=F) %>%
+    select(-var)
+
+  print(paste0("[",i,"]"," Simulating"))
+
+  sim.out <- simulate(map_ranges(xnew, ranges))[1] / 1e8
+  ynew <- sim.out[1]
+  dnew <- sim.out[2]
+  X <- rbind(X, xnew)
+  y <- c(y, ynew)
+  disp <- c(disp, dnew)
+
+  # update GP
+  print(paste0("[",i,"]"," Updating GP"))
+
+  updateGP(gpi, xnew, y[length(y)])
+}
+```
+
+```{r}
+library(interp)
+
+final_df <- cbind(X, y) %>%
+  as.data.frame() %>%
+  rename(stress=y)
+
+grid <- with(final_df, interp::interp(cote, icat, stress, duplicate=""))
+griddf <- subset(data.frame(x = rep(grid$x, nrow(grid$z)),
+                            y = rep(grid$y, each = ncol(grid$z)),
+                            z = as.numeric(grid$z)),
+                 !is.na(z))
+ggplot(griddf, aes(x, y, z = z)) +
+  geom_contour_filled() +
+  geom_point(data = final_df)
 ```
