@@ -92,8 +92,8 @@ maximin <- function(m, n, T=100000)
 ```
 
 ```{r}
-map_ranges <- function(X, ranges) {
-  X*rep(ranges[2,]-ranges[1,], each=length(X)/6) + rep(ranges[1,], each=length(X)/6)
+map_ranges <- function(XX, ranges) {
+  XX*rep(ranges[2,]-ranges[1,], each=nrow(XX)) + rep(ranges[1,], each=nrow(XX))
 }
 ```
 
@@ -151,9 +151,9 @@ simulate <- function(params) {
 stress <- c()
 displ  <- c()
 
-for (i in 1:nrow(initial_design)) {
+for (i in 1:nrow(init_design)) {
   print(paste0("[Row ",i,"] Simulating..."))
-  results <- simulate(initial_design[i,])
+  results <- simulate(init_design[i,])
   stress  <- c(stress, results[1])
   displ   <- c(displ, results[2])
   print(paste0("[Row ",i,"] Done"))
@@ -166,6 +166,8 @@ initial_df <- init_design %>%
 ```
 
 ```{r fig.height=8, fig.width=8}
+library(interp)
+
 initial_df <- read.csv("./initial.csv")[,-1] %>%
   mutate(fails=displ>1.3e-3)
 
@@ -252,7 +254,7 @@ maximin_seq <- function(m, n, T=100000, Xorig=NULL)
     mdprime <- min(d)
     if(!is.null(Xorig)) {             ## new code
       mdprime2 <- min(distance(X, Xorig))
-      if(mdprime2 < mdprime) mdprime <- mdprime2
+      if(mdprime2 > mdprime) mdprime <- mdprime2
     }
     if(mdprime > md) { 
       md <- mdprime
@@ -313,16 +315,24 @@ for (i in 1:100) {
 ```{r}
 library(interp)
 
+X_jit <- X %>%
+  mutate_all(jitter)
+
 final_df <- cbind(X, y) %>%
   as.data.frame() %>%
   rename(stress=y)
 
-grid <- with(final_df, interp::interp(cote, icat, stress, duplicate=""))
-griddf <- subset(data.frame(x = rep(grid$x, nrow(grid$z)),
-                            y = rep(grid$y, each = ncol(grid$z)),
-                            z = as.numeric(grid$z)),
+final_df %>% write.table(file="./seq.csv")
+
+map_ranges(X, ranges)
+
+grid <- with(final_df, interp::interp(plos, icat, stress))
+griddf <- subset(data.frame(x=rep(grid$x, nrow(grid$z)),
+                            y=rep(grid$y, each = ncol(grid$z)),
+                            z=as.numeric(grid$z)),
                  !is.na(z))
-ggplot(griddf, aes(x, y, z = z)) +
-  geom_contour_filled() +
-  geom_point(data = final_df)
+ggplot() +
+  geom_contour_filled(aes(x, y, z=z), data=griddf) +
+  # geom_point(aes(ymod, prat), data=final_df) + 
+  labs(x="cote", y="plos")
 ```
